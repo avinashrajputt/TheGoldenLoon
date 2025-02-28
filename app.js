@@ -9,6 +9,9 @@ const wrapAsync = require("./utils/wrapAsync");
 const expressError = require("./utils/expressError");
 const { listingSchema, reviewSchema } = require("./schema");
 const Review = require("./models/review");
+const session = require("express-session");
+const exp = require("constants");
+const flash = require("connect-flash");
 
 const MONGO_URL = "mongodb://127.0.0.1:27017/TheGoldenLoon";
 
@@ -29,8 +32,30 @@ app.use(methodoverride("_method"));
 app.engine("ejs", ejsMate);
 app.use(express.static(path.join(__dirname, "public")));
 
+//session
+const sessionOptions = {
+    secret: "mysupersecretcode",
+    resave: false,
+    saveUninitialized: true,
+    cookie: {
+        expires: Date.now() + 1000 * 60 * 60 * 24 * 7,
+        maxAge: 1000 * 60 * 60 * 24 * 7,
+        httpOnly: true,
+    },
+};
+
 app.get("/", (req, res) => {
     res.send("Hi, I am root");
+});
+
+app.use(session(sessionOptions));
+app.use(flash()); 
+
+//create middleware to store flash messages
+app.use((req, res, next) => {
+    res.locals.success = req.flash("success");
+    res.locals.error = req.flash("error");
+    next();
 });
 
 // Error handling middleware
@@ -69,6 +94,10 @@ app.get("/listings/new", (req, res) => {
 app.get("/listings/:id", wrapAsync(async (req, res) => {
     let { id } = req.params;
     const listing = await Listing.findById(id).populate("reviews");
+    if(!listing) {
+        req.flash("error", "Listing you requested for does not exist!");
+        res.redirect("/listings");
+    }
     res.render("listings/show.ejs", { listing });
 }));
 
@@ -76,6 +105,7 @@ app.get("/listings/:id", wrapAsync(async (req, res) => {
 app.post("/listings", validateListing, wrapAsync(async (req, res, next) => {
     const newListing = new Listing(req.body.listing);
     await newListing.save();
+    req.flash("success", "New Listing Created!");
     res.redirect("/listings");
 }));
 
@@ -83,6 +113,10 @@ app.post("/listings", validateListing, wrapAsync(async (req, res, next) => {
 app.get("/listings/:id/edit", wrapAsync(async (req, res) => {
     let { id } = req.params;
     const listing = await Listing.findById(id);
+    if(!listing) {
+        req.flash("error", "Listing you requested for does not exist!");
+        res.redirect("/listings");
+    }
     res.render("listings/edit.ejs", { listing });
 }));
 
@@ -90,6 +124,7 @@ app.get("/listings/:id/edit", wrapAsync(async (req, res) => {
 app.put("/listings/:id", validateListing, wrapAsync(async (req, res) => {
     let { id } = req.params;
     await Listing.findByIdAndUpdate(id, { ...req.body.listing });
+    req.flash("success", "Listing Updated!");
     res.redirect(`/listings/${id}`);
 }));
 
@@ -98,6 +133,7 @@ app.delete("/listings/:id", wrapAsync(async (req, res) => {
     let { id } = req.params;
     let deletedListing = await Listing.findByIdAndDelete(id);
     console.log(deletedListing);
+    req.flash("success", "Listing Deleted!");
     res.redirect("/listings");
 }));
 
@@ -109,6 +145,7 @@ app.post('/listings/:id/reviews', validateReview, wrapAsync(async (req, res) => 
   listing.reviews.push(review);
   await review.save();
   await listing.save();
+  req.flash('success', 'New Review Added!');
   res.redirect(`/listings/${listing._id}`);
 }));
 
@@ -117,6 +154,7 @@ app.delete('/listings/:id/reviews/:reviewId', wrapAsync(async (req, res) => {
   const { id, reviewId } = req.params;
   await Listing.findByIdAndUpdate(id, { $pull: { reviews: reviewId } });
   await Review.findByIdAndDelete(reviewId);
+    req.flash('success', 'Review Deleted!');
   res.redirect(`/listings/${id}`);
 }));
 

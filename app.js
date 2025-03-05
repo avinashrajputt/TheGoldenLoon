@@ -12,6 +12,9 @@ const Review = require("./models/review");
 const session = require("express-session");
 const exp = require("constants");
 const flash = require("connect-flash");
+const passport = require("passport");
+const LocalStrategy = require("passport-local");
+const User = require("./models/user");
 
 const MONGO_URL = "mongodb://127.0.0.1:27017/TheGoldenLoon";
 
@@ -51,12 +54,64 @@ app.get("/", (req, res) => {
 app.use(session(sessionOptions));
 app.use(flash()); 
 
+
+
+// Passport
+app.use(passport.initialize());
+app.use(passport.session());
+passport.use(new LocalStrategy(User.authenticate()));
+passport.serializeUser(User.serializeUser());
+passport.deserializeUser(User.deserializeUser());
+
+
 //create middleware to store flash messages
 app.use((req, res, next) => {
     res.locals.success = req.flash("success");
     res.locals.error = req.flash("error");
     next();
 });
+
+
+// app.get("/demouser", async (req, res) => {
+//     let fakeUser = new User({
+//         email: "student@gmail.com",
+//         username: "student"
+//     });
+//     let registeredUser = await User.register(fakeUser, "hello");
+//     res.send(registeredUser);
+// }
+// );
+
+//signup route
+app.get("/signup", (req, res) => {
+    res.render("users/signup.ejs");
+});
+app.post("/signup", wrapAsync(async (req, res) => {
+    try{
+    let { email, username, password } = req.body;
+    let user = new User({ email, username });
+    let registeredUser = await User.register(user, password);
+    req.flash("success", "Welcome to The Golden Loon!");
+    res.redirect("/listings");
+    }
+    catch(e){
+        req.flash("error", e.message);
+        res.redirect("/signup");
+    }
+}));
+
+//login route
+app.get("/login", (req, res) => {
+    res.render("users/login.ejs");
+});
+app.post("/login", passport.authenticate("local", { failureFlash: true, failureRedirect: "/login" }), (req, res) => {
+    req.flash("success", "Welcome back!");
+    let redirectUrl = req.session.returnTo || "/listings";
+    delete req.session.returnTo;
+    res.redirect(redirectUrl
+    );
+});
+
 
 // Error handling middleware
 const validateListing = (req, res, next) => {
